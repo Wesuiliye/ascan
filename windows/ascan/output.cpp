@@ -1,46 +1,49 @@
 #include "pch.h"
 
 #include <cstdint>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <windows.h>
 
 #include "output.h"
 
-static void FreeOutput(Output* output) {
-	if (!output) {
-		return;
-	}
-	free(output->data);
-	output->data = NULL;
-	free(output);
-}
-
-Output* NewOutput(int bufferSize, goCallback callback)
-{
-	if (bufferSize <= 0) {
-		bufferSize = 128;
-	}
-
-	Output* output = (Output*)malloc(sizeof(Output));
-	if (!output) {
+Output* NewOutput(int bufferSize, goCallback callback) {
+	/*
+	struct Output {
+		char* data;
+		int len;
+		goCallback callback;
+	};*/
+	// 1. 动态分配 Output 结构体（在堆上，函数结束后不释放）
+	struct Output* output = (struct Output*)malloc(sizeof(struct Output));
+	if (output == NULL) {
+		printf("内存分配失败：无法创建 Output 结构体\n");
 		return NULL;
 	}
 
+	// 2. 初始化成员变量
 	output->len = bufferSize;
-	output->data = (char*)malloc(output->len);
-	if (!output->data) {
-		free(output);
+
+	// 分配数据缓冲区
+	output->data = (char*)malloc(bufferSize);
+	if (output->data == NULL) {
+		printf("内存分配失败：无法创建数据缓冲区\n");
+		free(output);  // 释放已分配的结构体，避免内存泄漏
 		return NULL;
 	}
-	memset(output->data, 0, output->len);
+
+	memset(output->data, 0, output->len);  // 初始化缓冲区为0
 	output->callback = callback;
 
-	return output;
+	return output;  // 返回堆上的结构体地址（有效）
 }
 
+/// <summary>
+/// 可变长字符串缓冲区
+/// </summary>
+/// <param name="output"></param>
+/// <param name="format"></param>
+/// <param name=""></param>
 void append(Output* output, const char* format, ...)
 {
 	// current output length
@@ -53,6 +56,7 @@ void append(Output* output, const char* format, ...)
 	va_end(args);
 
 	// grow buffer if needed
+	// 如果剩余空间不够（含 \0），就把缓冲区按 2 倍连续 realloc，直到够用。
 	while ((n + l + 1) > (*output).len) {
 		(*output).len = (*output).len * 2;
 		(*output).data = (char*)realloc((*output).data, (*output).len);
@@ -66,22 +70,14 @@ void append(Output* output, const char* format, ...)
 
 int success(Output* output)
 {
-	if (!output) {
-		return 0;
-	}
-
-	if (output->callback) {
-		output->callback(output->data, (int)strlen(output->data));
-	}
-	FreeOutput(output);
+	(*output).callback((*output).data, strlen((*output).data));
+	free((*output).data);
 	return 0;
 }
 
 int failure(Output* output)
 {
-	if (output && output->callback) {
-		output->callback(output->data, (int)strlen(output->data));
-	}
-	FreeOutput(output);
+	(*output).callback((*output).data, strlen((*output).data));
+	free((*output).data);
 	return 1;
 }
